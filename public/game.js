@@ -100,8 +100,8 @@ function spawnProjectile(item){
  return new Promise(resolve=>{
   const ballMesh=new THREE.Mesh(new THREE.SphereGeometry(item.mega?.25:.17,16,12),new THREE.MeshStandardMaterial({color:item.color,roughness:.28,emissive:item.color,emissiveIntensity:.18}));
   ballMesh.position.set(actor.position.x+.85,2.1,actor.position.z+.2);ballMesh.castShadow=true;scene.add(ballMesh);
-  const start=performance.now(),duration=item.mega?1150:950;
-  projectiles.push({mesh:ballMesh,start,duration,item,resolve});
+  const start=performance.now(),duration=item.mega?1250:1050,targetX=-4.65+(slotIndex%4)*3.1,targetY=Math.floor(slotIndex/4)%2===0?4.55:1.75;
+  projectiles.push({mesh:ballMesh,start,duration,item,targetX,targetY,resolve});
  });
 }
 async function performTurn(item){
@@ -119,6 +119,7 @@ async function performTurn(item){
  await flight;
  // Recover and show the mark
  await tween(260,(v)=>{rightArm.rotation.x=.85*(1-v);rightArm.rotation.z=.12*(1-v);leftArm.rotation.x=-.25*(1-v);torso.rotation.x=-.13*(1-v);actor.rotation.y=.12*(1-v);});
+ if(slotIndex>=8){resetWall();slotIndex=0;round++;document.getElementById("round").textContent=String(round).padStart(2,"0");wallTex.needsUpdate=true;}
  drawTag(item.name,item.color,item.style,slotIndex++,item.mega);wallTex.needsUpdate=true;showImpact(item.name);
  scores.set(item.name,(scores.get(item.name)||0)+(item.mega?10:1));renderScores();
  await sleep(420);
@@ -163,9 +164,9 @@ new ResizeObserver(resize).observe(host);resize();
 function animate(now){
  requestAnimationFrame(animate);
  for(let i=projectiles.length-1;i>=0;i--){
-  const p=projectiles[i],t=Math.min(1,(now-p.start)/p.duration),x=-3.9+3.6*t,y=2.05+Math.sin(t*Math.PI)*2.0,z=1.2-4.0*t;
+  const p=projectiles[i],t=Math.min(1,(now-p.start)/p.duration),x=-3.9+(p.targetX+3.9)*t,y=2.05+(p.targetY-2.05)*t+Math.sin(t*Math.PI)*2.1,z=1.2-4.0*t;
   p.mesh.position.set(x,y,z);p.mesh.rotation.x+=.16;p.mesh.rotation.z+=.12;p.mesh.scale.setScalar(1+t*.2);
-  if(t>=1){scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();p.resolve();}
+  if(t>=1){scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();projectiles.splice(i,1);p.resolve();}
  }
  // breathing idle when no throwing action
  if(!processing){torso.position.y=1.35+Math.sin(now*.002)*.025;rightArm.rotation.z=Math.sin(now*.0015)*.025;leftArm.rotation.z=-Math.sin(now*.0015)*.025;}
