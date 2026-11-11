@@ -1,0 +1,1 @@
+{"name":"splat-wall-live","version":"1.0.0","private":true,"description":"Lightweight 3D TikTok LIVE interactive paint wall game","main":"server.js","scripts":{"start":"node server.js","dev":"node --watch server.js"},"dependencies":{"express":"^4.21.2","socket.io":"^4.8.1"}}
