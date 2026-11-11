@@ -104,18 +104,22 @@ function showImpact(name){const el=document.getElementById("impactLabel");el.tex
 function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 function ease(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
 function tween(ms,fn){return new Promise(resolve=>{const start=performance.now();function step(now){const t=Math.min(1,(now-start)/ms);fn(ease(t),t);if(t<1)requestAnimationFrame(step);else resolve();}requestAnimationFrame(step);});}
-function spawnProjectile(item){
- return new Promise(resolve=>{
-  const ballMesh=new THREE.Mesh(new THREE.SphereGeometry(item.mega?.25:.17,16,12),new THREE.MeshStandardMaterial({color:item.color,roughness:.28,emissive:item.color,emissiveIntensity:.18}));
-  ballMesh.position.set(actor.position.x+.85,2.1,actor.position.z+.2);ballMesh.castShadow=true;scene.add(ballMesh);
-  const start=performance.now(),duration=item.mega?1250:1050,targetX=-4.65+(slotIndex%4)*3.1,targetY=Math.floor(slotIndex/4)%2===0?4.55:1.75;
-  projectiles.push({mesh:ballMesh,start,duration,item,targetX,targetY,resolve});
+async function spawnProjectile(item){
+ return new Promise(async resolve=>{
+  let projectile=null;
+  if(item.kind==="fruit"){try{projectile=await loadFruit(item.fruitName);}catch(err){console.warn("Fruit GLB missing; using paint capsule",err);}}
+  if(!projectile)projectile=buildPaintBomb(item.color);
+  projectile.position.set(actor.position.x+.9,2.25,actor.position.z+.2);
+  projectile.traverse(o=>{if(o.isMesh)o.castShadow=true;});scene.add(projectile);
+  const start=performance.now(),duration=item.mega?1300:1120;
+  const targetX=slotIndex%2===0?-2.15:2.15,targetY=13.0-(Math.floor(slotIndex/2)%4)*3.6;
+  projectiles.push({mesh:projectile,start,duration,item,targetX,targetY,resolve});
  });
 }
 async function performTurn(item){
  processing=true;currentViewer.textContent=item.name;updateStatus("NEXT UP: "+item.name);document.getElementById("tickerText").textContent=item.name+" — GET READY!";
  // Character walks into throwing position
- await tween(520,(v)=>{actor.position.x=-4.8+v*.65;leftLeg.rotation.x=Math.sin(v*Math.PI)*.65;rightLeg.rotation.x=-Math.sin(v*Math.PI)*.65;torso.rotation.y=-.08*v;});
+ playCharacterAction("walk");await tween(520,(v)=>{actor.position.x=-3.55+v*.65;leftLeg.rotation.x=Math.sin(v*Math.PI)*.65;rightLeg.rotation.x=-Math.sin(v*Math.PI)*.65;torso.rotation.y=-.08*v;});
  leftLeg.rotation.x=0;rightLeg.rotation.x=0;
  // Anticipation: bend body and pull throwing arm back
  updateStatus("AIMING...");playCharacterAction("idle");
@@ -140,7 +144,7 @@ async function processQueue(){
  if(processing)return;processing=true;
  while(queue.length){
   const item=queue.shift();renderQueue();
-  try{await performTurn(item);}catch(err){console.error("Turn failed",err);updateStatus("READY TO SPLAT");}
+  try{for(let shot=0;shot<item.shots;shot++){await performTurn({...item,name:item.shots>1?item.name+" "+(shot+1):item.name,mega:item.mega||item.shots>=4});if(shot<item.shots-1)await sleep(260);}}catch(err){console.error("Turn failed",err);updateStatus("READY TO SPLAT");}
  }
  processing=false;currentViewer.textContent="WAITING";updateStatus("READY TO SPLAT");renderQueue();
 }
@@ -153,10 +157,10 @@ function enqueue(name,color=selectedColor,style=selectedStyle,mega=false,kindLab
 }
 function handleEvent(e){
  if(!e)return;const user=String(e.username||"GUEST").toUpperCase();
- if(e.type==="comment"){const requested=String(e.message||"").trim();if(requested)enqueue(requested,selectedColor,selectedStyle,false,"COMMENT");}
- else if(e.type==="like"){likes++;if(likes%12===0)enqueue(user,palette[likes/12%palette.length],"block",false,"LIKE BONUS");}
- else if(e.type==="follow")enqueue(user,palette[Math.floor(Math.random()*palette.length)],"block",false,"FOLLOW BONUS");
- else if(e.type==="gift")enqueue(user,selectedColor,selectedStyle,(Number(e.coins)||0)>=10||!e.coins,"GIFT");
+ if(e.type==="comment"){const requested=String(e.message||"").trim();if(requested)enqueue(requested,selectedColor,selectedStyle,false,"COMMENT","paint",null,1);}
+ else if(e.type==="like"){likes++;if(likes%12===0)enqueue(user,palette[likes/12%palette.length],"block",false,"LIKE BONUS","paint",null,1);}
+ else if(e.type==="follow")enqueue(user,palette[Math.floor(Math.random()*palette.length)],"block",false,"FOLLOW BONUS","paint",null,2);
+ else if(e.type==="gift"){const coins=Number(e.coins)||1,shots=Math.min(6,Math.max(2,Math.ceil(coins/5)));enqueue(user,selectedColor,selectedStyle,coins>=10,"GIFT","fruit",null,shots);}
 }
 document.getElementById("tagForm").addEventListener("submit",e=>{e.preventDefault();const v=document.getElementById("nameInput").value.trim();if(v)enqueue(v);});
 document.getElementById("likeBtn").onclick=()=>handleEvent({type:"like",username:"LIVE_VIEWER"});
@@ -169,15 +173,17 @@ document.getElementById("clearBtn").onclick=()=>{
 if(window.io){const socket=io();socket.on("connect",()=>document.getElementById("connection").textContent="CONNECTED");socket.on("disconnect",()=>document.getElementById("connection").textContent="LOCAL");socket.on("game:event",handleEvent);}
 function resize(){const w=host.clientWidth,h=host.clientHeight;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);}
 new ResizeObserver(resize).observe(host);resize();
+const clock=new THREE.Clock();
 function animate(now){
  requestAnimationFrame(animate);
  for(let i=projectiles.length-1;i>=0;i--){
   const p=projectiles[i],t=Math.min(1,(now-p.start)/p.duration),x=-2.65+(p.targetX+2.65)*t,y=2.05+(p.targetY-2.05)*t+Math.sin(t*Math.PI)*2.6,z=1.2-4.0*t;
   p.mesh.position.set(x,y,z);p.mesh.rotation.x+=.16;p.mesh.rotation.z+=.12;p.mesh.scale.setScalar(1+t*.2);
-  if(t>=1){scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();projectiles.splice(i,1);p.resolve();}
+  if(t>=1){scene.remove(p.mesh);p.mesh.traverse(o=>{if(o.isMesh){o.geometry?.dispose();if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material?.dispose();}});projectiles.splice(i,1);p.resolve();}
  }
  // breathing idle when no throwing action
  if(!processing){torso.position.y=1.35+Math.sin(now*.002)*.025;rightArm.rotation.z=Math.sin(now*.0015)*.025;leftArm.rotation.z=-Math.sin(now*.0015)*.025;}
+ if(characterMixer)characterMixer.update(Math.min(.05,clock.getDelta()));
  renderer.render(scene,camera);
 }
 requestAnimationFrame(animate);
