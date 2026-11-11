@@ -165,7 +165,7 @@ function animate(now){
  for(let i=projectiles.length-1;i>=0;i--){
   const p=projectiles[i],t=Math.min(1,(now-p.start)/p.duration),x=-3.9+3.6*t,y=2.05+Math.sin(t*Math.PI)*2.0,z=1.2-4.0*t;
   p.mesh.position.set(x,y,z);p.mesh.rotation.x+=.16;p.mesh.rotation.z+=.12;p.mesh.scale.setScalar(1+t*.2);
-  if(t>=1){scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();drawTag(p.item.name,p.item.color,p.item.style,slotIndex,p.item.mega);p.resolve();}
+  if(t>=1){scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();p.resolve();}
  }
  // breathing idle when no throwing action
  if(!processing){torso.position.y=1.35+Math.sin(now*.002)*.025;rightArm.rotation.z=Math.sin(now*.0015)*.025;leftArm.rotation.z=-Math.sin(now*.0015)*.025;}
